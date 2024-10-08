@@ -38,9 +38,3 @@ Before running the project, ensure you have the following installed:
 2. Submit the job to your HPC using:
    ```bash
    sbatch sbatch_mpi.sh
-
-
-
-
-This project implements a manager-worker model to achieve distributed clustering through the Message-Passing Interface (MPI) system. Whenever a worker HPC node finishes a clustering job, it will send the results to the manager node to eavaluate. The manager node saves the clusters that can not be further clustered (part of the final clustering results), and append the clusters into the queue for furtehr clustering. Whenever a node is available, it will take a job from the queue to do. 
-=
