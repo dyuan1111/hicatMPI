@@ -1,1 +1,46 @@
-# hicatMPI
+# Accelerating Transcriptomic Clustering with Distributed Computing
+
+This project implements a **dynamic, asynchronous clustering algorithm** using the **Message-Passing Interface (MPI)** to distribute clustering tasks across multiple HPC nodes. The method efficiently launches clustering jobs in parallel, assigning pending clustering tasks from the queue as soon as a HPC node completes its current task. This improves upon the original recursive clustering algorithm implemented in the Python package transcriptomic_clustering and the R package scrattch.hicat (see Background below for more information), significantly reducing the time to cluster large datasets.
+
+### Background
+The transcriptomic clustering Python package that uses a **scVI latent space** can be found here: [transcriptomic_clustering](https://github.com/AllenInstitute/transcriptomic_clustering/tree/hmba/tc_latent). It is the Python version of the R package [scrattch.hicat](https://github.com/AllenInstitute/scrattch.hicat), both of which perform clustering recursively (depth-first search). The transcriptomic_clustering package can take significant time for large datasets. For instance, clustering 1 million cells can take ~2 days.
+
+### Distributed Clustering Model
+This project replaces the depth-first search (DFS) recursive method with a **dynamic, asynchronous manager-worker model**:
+- **Manager Node**: Oversees the clustering process, distributing jobs to worker nodes and managing the queue of tasks.
+- **Worker Nodes**: Independently perform clustering tasks and, once a job finishes, immediately taking a job from the queue and performing clustering again.
+- **Asynchronous Task Distribution**: The system doesn’t wait for all clustering jobs at the same hierarchy to finish before moving on. Instead, as soon as a worker node completes its current job, it directly moves to the next pending task in the queue.
+
+## How It Works
+
+![Process Illustration](images/mpiTC.jpeg)
+
+- **Step 1**: The manager node performs the initial clustering task. Once that finishes, the manager node appends all subsequent clustering jobs for each cluster into the job queue. For each available worker node, the manager assigns a job from the queue.
+- **Step 2**: Each worker node performs its assigned clustering task.
+- **Step 3**: Once a worker finishes, it sends the result to the manager and immediately takes a pending job from the queue. The manager evaluate the clusters:
+  - for clusters that cannot be further clustered (clustered into 1 cluster), the results are added to the final results.
+  - for clusters that can be furtehr clustered (clustered into > 1 clusters), the subclusters are added to the queue for further clustering.
+- **Step 4**: The process continues until the job queue is empty and all nodes have terminated.
+
+## Prerequisites
+
+Before running the project, ensure you have the following installed:
+- Python 3
+- MPI from [mpi4py](https://mpi4py.readthedocs.io/en/stable/mpi4py.html)
+- Required Python package:
+  - `transcriptomic_clustering`
+
+---
+
+## Running the Code
+
+1. Modify the `sbatch_mpi.sh` script to specify the number of nodes and any required configuration for your HPC environment.
+2. Submit the job to your HPC using:
+   ```bash
+   sbatch sbatch_mpi.sh
+
+
+
+
+This project implements a manager-worker model to achieve distributed clustering through the Message-Passing Interface (MPI) system. Whenever a worker HPC node finishes a clustering job, it will send the results to the manager node to eavaluate. The manager node saves the clusters that can not be further clustered (part of the final clustering results), and append the clusters into the queue for furtehr clustering. Whenever a node is available, it will take a job from the queue to do. 
+=
