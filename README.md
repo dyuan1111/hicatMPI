@@ -1,9 +1,9 @@
 # Accelerating Transcriptomic Clustering with Distributed Computing
 
-This project implements a **dynamic, asynchronous clustering algorithm** using the **Message-Passing Interface (MPI)** to distribute clustering tasks across multiple HPC nodes. The method efficiently launches clustering jobs in parallel, assigning pending clustering tasks from the queue as soon as a HPC node completes its current task. This improves upon the original recursive clustering algorithm implemented in the Python package transcriptomic_clustering and the R package scrattch.hicat (see Background below for more information), significantly reducing the time to cluster large datasets.
+This project implements a **dynamic, asynchronous clustering algorithm** using the **Message-Passing Interface (MPI)** to distribute clustering tasks across multiple HPC nodes. The method efficiently launches clustering jobs in parallel, assigning pending clustering tasks from the queue as soon as a HPC node completes its current task. This improves upon the original recursive clustering algorithm implemented in the Python package transcriptomic_clustering (see Background below for more information), significantly reducing the time to cluster large datasets. 
 
 ### Background
-The transcriptomic clustering Python package that uses a **scVI latent space** can be found here: [transcriptomic_clustering](https://github.com/AllenInstitute/transcriptomic_clustering/tree/hmba/tc_latent). It is the Python version of the R package [scrattch.hicat](https://github.com/AllenInstitute/scrattch.hicat), both of which perform clustering recursively (depth-first search). The transcriptomic_clustering package can take significant time for large datasets. For instance, clustering 1 million cells can take ~2 days.
+The transcriptomic clustering Python package that uses a **scVI latent space** can be found here: [transcriptomic_clustering](https://github.com/AllenInstitute/transcriptomic_clustering/tree/hmba/tc_latent). It is the Python version of the R package [scrattch.hicat](https://github.com/AllenInstitute/scrattch.hicat), both of which perform clustering recursively (depth-first search). The recursive approach can take significant time for large datasets. For instance, clustering 1 million cells can take ~2 days.
 
 ### Distributed Clustering Model
 This project replaces the depth-first search (DFS) recursive method with a **dynamic, asynchronous manager-worker model**:
@@ -22,6 +22,19 @@ This project replaces the depth-first search (DFS) recursive method with a **dyn
   - for clusters that can be furtehr clustered (clustered into > 1 clusters), the subclusters are added to the queue for further clustering.
 - **Step 4**: The process continues until the job queue is empty and all nodes have terminated.
 
+## Benchmarking Results
+
+The table below shows the comparison of run time between the original recursive clustering method and the dynamic, asynchronous MPI-based method.
+
+| Number of Cells | Recursive        | MPI (This Method)      |
+|-----------------|------------------|-------------------------|
+| 10,000          | 12 minutes       | 9 minutes               |
+| 80,000          | 63 minutes       | 18 minutes              |
+| 1,000,000       | 47 hours 41 minutes | 2 hours 15 minutes    |
+
+### Notes on Node Utilization:
+- Clustering 1.2 million cells were achieved using 10 nodes with 500G memory each. It took 2-3 hours to finish. 
+
 ## Prerequisites
 
 Before running the project, ensure you have the following installed:
@@ -38,3 +51,4 @@ Before running the project, ensure you have the following installed:
 2. Submit the job to your HPC using:
    ```bash
    sbatch sbatch_mpi.sh
+
