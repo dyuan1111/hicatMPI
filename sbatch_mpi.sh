@@ -36,6 +36,6 @@ if [ ! -d "$out_dir" ]; then
 fi
 cd "$out_dir"
 
-export PYTHONPATH=/allen/programs/celltypes/workgroups/rnaseqanalysis/dyuan/tool/tc_latent:$PYTHONPATH
+export PYTHONPATH=/allen/programs/celltypes/workgroups/rnaseqanalysis/dyuan/tool/transcriptomic_clustering:$PYTHONPATH
 
 time mpiexec -n 1 sh -c "python \"$manager_script\" \"$adata_dir\" \"$scvi_dir\" \"$out_dir\"> manager_output.log 2> manager_error.log" : -n 4 sh -c "python \"$worker_script\" > worker_output.log 2> worker_error.log" # somehow worker_output.log is trucated, but its ok.
