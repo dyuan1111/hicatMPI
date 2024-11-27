@@ -7,6 +7,8 @@ import sys
 import pandas as pd
 import numpy as np
 import scanpy as sc
+import re
+import ast
 
 from transcriptomic_clustering.iterative_clustering import onestep_clust, OnestepKwargs
 
@@ -17,63 +19,27 @@ size = comm.Get_size()
 
 MANAGER_RANK = 0
 
-def setup_transcriptomic_clustering(): 
-    means_vars_kwargs = {
-        'low_thresh': 0.6931472, # lowest value required for a gene to pass filtering. set to 1 originally, 0.6931472 to match to bigcat
-        'min_cells': 4 # minimum number of cells expressed required for a gene to pass filtering
-    }
-    highly_variable_kwargs = {
-        'max_genes': 4000 # originally 3000, 4000 to match to bigcat
-    }
-    pca_kwargs = {
-        'cell_select': 30000, # originally 500000 cells
-        'n_comps': 50,
-        'svd_solver': 'randomized'
-    }
-    filter_pcs_kwargs = {
-        'known_components': None,
-        'similarity_threshold': 0.7,
-        'method': 'zscore', # or elbow
-        'zth': 2,
-        'max_pcs': None,
-    }
-    ## Leave empty if you don't want to use known_modes
-    filter_known_modes_kwargs = {
-        # 'known_modes': known_modes_df, # a pd dataframe. index is obs (cell) names, columns are known modes. Originally commented out 
-        'similarity_threshold': 0.7
-    }
-    ## !!NEW!! Original method: "PCA", allows the user to select any obsm latent space such as "X_scVI" for leiden clustering.
-    latent_kwargs = {
-        # 'latent_component': "X_pca"
-        'latent_component': "scVI"
-    }
+def manager_job_queue(adata_path, latent_path, out_path, clust_kwargs): # data is a tuple of anndata and key argumnents
+    start = time.perf_counter()
 
-    cluster_louvain_kwargs = {
-        'k': 15, # number of nn, originally 150, change to 15
-        'nn_measure': 'euclidean',
-        'knn_method': 'annoy',
-        'louvain_method': 'taynaud', #'vtraag',
-        'weighting_method': 'jaccard',
-        'n_jobs': 30, # cpus # originally 8`
-        'resolution': 1.0 # resolution of louvain for taynaud method
-    }
-    merge_clusters_kwargs = {
-        'thresholds': {
-            'q1_thresh': 0.5,
-            'q2_thresh': None,
-            'cluster_size_thresh': 10, ## originally uses 50, 10 to match to bigcat
-            'qdiff_thresh': 0.7, 
-            'padj_thresh': 0.05, 
-            'lfc_thresh': 1, # log2 fold change threshold for DE genes
-            'score_thresh': 100, # originally uses 200, 100 to match to bigcat
-            'low_thresh': 0.6931472, # originally uses 1 # applied to log2(cpm+1) to determine if a gene is expressed or not, 0.6931472 to match to bigcat
-            'min_genes': 5
-        },
-        'k': 4, # number of nn for de merge, originaly 2, 4 to match to bigcat
-        'de_method': 'ebayes'
-    }
+    def preprocess_dict(dict_str):
+    # Remove comments using regex
+        dict_str_cleaned = re.sub(r"#.*", "", dict_str)
+        return dict_str_cleaned
+        
+    clust_kwargs = preprocess_dict(clust_kwargs)
+    clust_kwargs = ast.literal_eval(clust_kwargs)
 
-    onestep_kwargs = OnestepKwargs(
+    means_vars_kwargs = clust_kwargs['means_vars_kwargs']
+    highly_variable_kwargs = clust_kwargs['highly_variable_kwargs']
+    pca_kwargs = clust_kwargs['pca_kwargs']
+    filter_pcs_kwargs = clust_kwargs['filter_pcs_kwargs']
+    filter_known_modes_kwargs = clust_kwargs['filter_known_modes_kwargs']
+    latent_kwargs = clust_kwargs['latent_kwargs']
+    cluster_louvain_kwargs = clust_kwargs['cluster_louvain_kwargs']
+    merge_clusters_kwargs = clust_kwargs['merge_clusters_kwargs']
+
+    clust_kwargs = OnestepKwargs(
         means_vars_kwargs = means_vars_kwargs,
         highly_variable_kwargs = highly_variable_kwargs,
         pca_kwargs = pca_kwargs,
@@ -83,30 +49,29 @@ def setup_transcriptomic_clustering():
         cluster_louvain_kwargs = cluster_louvain_kwargs,
         merge_clusters_kwargs = merge_clusters_kwargs
     )
-    return onestep_kwargs
-
-def manager_job_queue(adata_path, scvi_path, out_path): # data is a tuple of anndata and key argumnents
-    start = time.perf_counter()
 
     adata = sc.read(adata_path)
     print(f"Finished reading in anndata: {adata}")
 
     if np.max(adata.X) > 100:
-        print(f"raw count data provided")
+        print(f"Raw count data provided")
         print(f"Normlazing total counts to 1e6...")
         sc.pp.normalize_total(adata, target_sum=1e6)
         sc.pp.log1p(adata)
         print(f"Finished normalization. max:{np.max(adata.X)}")
     else:
-        print(f"normalized data provided")
+        print(f"Normalized data provided")
 
-    latent = pd.read_csv(scvi_path, index_col=0)
-    latent = latent.loc[adata.obs_names]
-    print(f"Finished reading in scVI latent space: {latent.shape}")
+    # determine if latent_path is valid
+    if os.path.exists(latent_path):
+        latent = pd.read_csv(latent_path, index_col=0)
+        latent = latent.loc[adata.obs_names]
+        adata.obsm['latent'] = np.asarray(latent)
+        clust_kwargs.latent_kwargs['latent_component'] = 'latent'
+        print(f"Finished reading in latent space: {latent.shape}")
+    else:
+        print(f"latent_path is invalid or not provided. Using latent_kwargs['latent_component'] for clustering (None for PCA and a str for obsm key)")
     
-    adata.obsm['scVI'] = np.asarray(latent)
-
-    kwargs = setup_transcriptomic_clustering()
     min_samples = 4
     random_seed = 2024
     min_samples = 4
@@ -115,7 +80,7 @@ def manager_job_queue(adata_path, scvi_path, out_path): # data is a tuple of ann
         os.makedirs(tmp_dir)
 
     # let the manager do the first clustering
-    clusters, markers = onestep_clust(adata, kwargs, random_seed)
+    clusters, markers = onestep_clust(adata, clust_kwargs, random_seed)
     sizes = [len(cluster) for cluster in clusters]
     print(f"Manager finished clustering {adata.shape[0]} cells into {len(clusters)} clusters of sizes {sizes}")
 
@@ -136,7 +101,7 @@ def manager_job_queue(adata_path, scvi_path, out_path): # data is a tuple of ann
                 new_adata_path = os.path.join(tmp_dir, str(adata_tmp_idx)+'.h5ad')
                 new_adata.write(new_adata_path)
 
-                new_task = (onestep_clust, (new_adata_path, kwargs, random_seed, idx))
+                new_task = (onestep_clust, (new_adata_path, clust_kwargs, random_seed, idx))
                 job_queue.put(new_task)
 
                 adata_tmp_idx += 1
@@ -181,7 +146,7 @@ def manager_job_queue(adata_path, scvi_path, out_path): # data is a tuple of ann
                     new_adata_path = os.path.join(tmp_dir, str(adata_tmp_idx)+'.h5ad')
                     new_adata.write(new_adata_path)
 
-                    new_task = (onestep_clust, (new_adata_path, kwargs, random_seed, idx))
+                    new_task = (onestep_clust, (new_adata_path, clust_kwargs, random_seed, idx))
                     job_queue.put(new_task)
 
                     adata_tmp_idx += 1
@@ -210,21 +175,14 @@ def manager_job_queue(adata_path, scvi_path, out_path): # data is a tuple of ann
 
     with open(os.path.join(out_dir,'markers.pkl'), 'wb') as f:
         pickle.dump(markers, f)
-    
-    # convert the clustering results to a .csv file
-    n_cells = sum(len(i) for i in results)
-    cl = ['unknown']*n_cells
-    for i in range(len(results)):
-        for j in results[i]:
-            cl[j] = i+1
-    res = pd.DataFrame({'cl': cl}, index=adata.obs_names)
-    res.to_csv(os.path.join(out_dir,'cl.csv'))
-    
-    print(f"Manager finished writing clustering results to file")
+
+    print(f"Finished writing clustering results to {out_dir}")
+    print(f"Next step: run a final merge of clusters")
 
 if __name__ == "__main__":
     if rank == MANAGER_RANK:  # Only the master process executes this
         adata_path = sys.argv[1]
-        scvi_path = sys.argv[2]
+        latent_path = sys.argv[2]
         out_path = sys.argv[3]
-        manager_job_queue(adata_path, scvi_path, out_path)
+        clust_kwargs = sys.argv[4]
+        manager_job_queue(adata_path, latent_path, out_path, clust_kwargs)
