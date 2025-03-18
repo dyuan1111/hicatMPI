@@ -83,6 +83,7 @@ source /allen/programs/celltypes/workgroups/rnaseqanalysis/dyuan/miniconda3/etc/
 conda activate /allen/programs/celltypes/workgroups/rnaseqanalysis/dyuan/miniconda3/envs/rapids_singlecell
 
 module load mpi/mpich-3.2-x86_64
+# module load mpi/mpich-x86_64 # use this for the new hpc
 
 # Navigate to the output directory, where the log and out files will be saved
 # Check if the out directory exists. if not, create it
