@@ -1,10 +1,10 @@
-# Accelerating Transcriptomic Clustering with Distributed Computing
+# Accelerating *transcriptomic_clustering* with Distributed Computing
 
 
 This method implements a **dynamic, asynchronous clustering algorithm** using the **Message-Passing Interface (MPI)** to distribute clustering tasks across multiple HPC nodes. It provides the same clustering results as the transcriptomic_clustering package but is optimized for distributed computating using MPI, significantly reducing the time required to cluster large datasets. 
 
 ## Quick Start
-1. Modify the `sbatch_mpi.sh` script to specify the number of nodes and any required configuration for your HPC environment. Also, specify the paths to the raw counts (.h5ad), the precomputed latent space (.csv with cell names as index), the output directory, and the clustering parameters. (Optional) Change the conda environment and the path to the trancriptomic_clustering package (if it is not installed in the same conda enviroment). See requirements.txt for building your own conda enviroment.
+1. Modify the `sbatch_mpi.sh` script to specify the number of nodes and any required configuration for your HPC environment. Also, specify the paths to the raw counts (a .h5ad file), the precomputed latent space (a .csv file with cell names as index), the output directory, the manager and the worker scripts, and the clustering parameters. (Optional) Change the conda environment and the path to the trancriptomic_clustering package (if it is not installed in the same conda enviroment). See requirements.txt for building your own conda enviroment.
 2. Submit the job to your HPC using:
    ```bash
    sbatch sbatch_mpi.sh
