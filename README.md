@@ -41,6 +41,4 @@ The table below shows the comparison of run time between the transcriptomic_clus
 ### Clustering results comparison
 The confusion matrices below shows the clustering results from the transcriptomic_clustering package (y axis) and hicatMPI (x axis) for clustering 10k cells (left), 78k cells (middle), and 1 million cells (right). The 1-1 correspondence confirms that the same clustering results are obtained from both the original transcriptomic_clustering package and this MPI-based implementation, given the same data input and clustering parameters.
 
-<img src="images/10k.png" width="250"/>
-<img src="images/78k.png" width="237"/>
-<img src="images/1m.png" width="240"/>
+<img src="images/10k.png" width="250"/> <img src="images/78k.png" width="237"/> <img src="images/1m.png" width="240"/>
