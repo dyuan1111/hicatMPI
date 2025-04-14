@@ -1,10 +1,11 @@
 #!/bin/bash
 #SBATCH --job-name=mpi
 #SBATCH --partition=celltypes
-#SBATCH --nodes=11
+#SBATCH --nodes=10
 #SBATCH --ntasks-per-node=1
+#SBATCH --cpus-per-task=10
 #SBATCH --time=100:00:00
-#SBATCH --mem=200G
+#SBATCH --mem=500G
 #SBATCH --mail-user=dan.yuan@alleninstitute.org
 #SBATCH --mail-type=END,FAIL
 
@@ -16,9 +17,12 @@
 # 3. the absolute path to the manager script and the worker script
 # 4. the clustering parameters. The default parameters are set to match the bigcat default parameters. You can change them as needed.
 
-adata_dir="/allen/programs/celltypes/workgroups/rnaseqanalysis/dyuan/HMBA_analysis/iscANVI_mapping/troubleshoot/adata_query_MHGlut.h5ad" # norm or counts in X is fine.
-latent_dir="/allen/programs/celltypes/workgroups/rnaseqanalysis/dyuan/HMBA_analysis/iscANVI_mapping/troubleshoot/run3/scvi_09062024/scvi_latent_integrated.csv" 
-out_dir="/allen/programs/celltypes/workgroups/rnaseqanalysis/dyuan/custom_packages/mpi_tc/hicatMPI/test0_70k_extraLatent" # output directory
+adata_dir="/allen/programs/celltypes/workgroups/rnaseqanalysis/dyuan/test/subsample_data/test_subsample_1000k_count.h5ad"
+latent_dir="/allen/programs/celltypes/workgroups/rnaseqanalysis/dyuan/test/subsample_data/scvi_latent_1000k/scvi_latent_1millionCells.csv"
+out_dir="/allen/programs/celltypes/workgroups/rnaseqanalysis/dyuan/custom_packages/mpi_tc/archive_versions/v3/test_1M_2"
+
+manager_script="/allen/programs/celltypes/workgroups/rnaseqanalysis/dyuan/custom_packages/mpi_tc/hicatMPI/iterative_clustering_mpi_manager.py"
+worker_script="/allen/programs/celltypes/workgroups/rnaseqanalysis/dyuan/custom_packages/mpi_tc/hicatMPI/iterative_clustering_mpi_worker.py"
 
 # The following are the default parameters for the clustering. You can change them as needed.
 clust_kwargs="{
@@ -76,24 +80,16 @@ clust_kwargs="{
     }
 }"
 
-manager_script="/allen/programs/celltypes/workgroups/rnaseqanalysis/dyuan/custom_packages/mpi_tc/hicatMPI/iterative_clustering_mpi_manager.py"
-worker_script="/allen/programs/celltypes/workgroups/rnaseqanalysis/dyuan/custom_packages/mpi_tc/hicatMPI/iterative_clustering_mpi_worker.py"
-
 source /allen/programs/celltypes/workgroups/rnaseqanalysis/dyuan/miniconda3/etc/profile.d/conda.sh
-conda activate /allen/programs/celltypes/workgroups/rnaseqanalysis/dyuan/miniconda3/envs/rapids_singlecell
+conda activate /allen/programs/celltypes/workgroups/rnaseqanalysis/dyuan/miniconda3/envs/tc
 
-module load mpi/mpich-3.2-x86_64
-# module load mpi/mpich-x86_64 # use this for the new hpc
-
-# Navigate to the output directory, where the log and out files will be saved
-# Check if the out directory exists. if not, create it
 if [ ! -d "$out_dir" ]; then
     # If the directory doesn't exist, create it
     mkdir -p "$out_dir"
     echo "Directory '$out_dir' created."
 fi
-cd "$out_dir"
+cd "$out_dir" # navigate to the output directory, where the log and out files will be saved
 
 export PYTHONPATH=/allen/programs/celltypes/workgroups/rnaseqanalysis/dyuan/tool/transcriptomic_clustering:$PYTHONPATH
 
-time mpiexec -n 1 sh -c "python \"$manager_script\" \"$adata_dir\" \"$latent_dir\" \"$out_dir\" \"$clust_kwargs\"> manager_output.log 2> manager_error.log" : -n 10 sh -c "python \"$worker_script\" > worker_output.log 2> worker_error.log" # somehow worker_output.log is trucated, but its ok.
+time mpiexec -n 1 sh -c "python \"$manager_script\" \"$adata_dir\" \"$latent_dir\" \"$out_dir\" \"$clust_kwargs\"> manager_output.log 2> manager_error.log" : -n 9 sh -c "python \"$worker_script\" \"$out_dir\" 2> worker_error.log" 

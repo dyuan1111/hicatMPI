@@ -1,6 +1,9 @@
 from mpi4py import MPI
 import anndata as ad
 import os
+import pickle
+import traceback
+import sys
 
 # Initialize MPI
 comm = MPI.COMM_WORLD
@@ -8,40 +11,61 @@ rank = comm.Get_rank()
 
 MANAGER_RANK = 0
 
-def worker_job():
-    while True:
-        # Receive job from manager
-        task = comm.recv(source=MANAGER_RANK, tag=MPI.ANY_TAG)
-    
-        if task is None:
-            # print(f"Worker {rank} received termination signal.")
-            # comm.send(None, dest=MANAGER_RANK, tag=0)
-            break  # No more jobs, exit loop
+def worker_job(out_path):
+    # Create a directory for worker logs if it doesn't exist
+    os.makedirs(os.path.join(out_path, "worker_logs"), exist_ok = True)
 
-        func, args = task
-        adata_path, kwargs, random_seed, idx = args
+    with open(f"{out_path}/worker_logs/worker_{rank}_output.log", 'w') as out_file:
+        #  open(f"{out_path}/worker_logs/worker_{rank}_error.log", 'w') as err_file: # did not work
+        # Redirect stdout to output file
+        sys.stdout = out_file
+        # sys.stderr = err_file # did not work, will just write to the slurm output file
 
-        # Simulate processing (replace with actual computation)
-        adata = ad.read_h5ad(adata_path)
-        n = adata.shape[0]
-        clusters, markers = func(adata, kwargs, random_seed)
+        while True: # this is necessary to keep the worker running, otherwise it will just process just one task before exit
+            # Receive a job from the manager
+            task = comm.recv(source=MANAGER_RANK, tag=MPI.ANY_TAG)
+        
+            if task is None:
+                print(f"Worker {rank} received termination signal.", flush=True)
+                break  
 
-        # convert the indices back to the original indices
-        original_clusters = []
-        for cluster in clusters:
-            original_clusters.append([idx[i] for i in cluster])
+            try:
+                func, args = task
+                adata_path, kwargs, random_seed, idx_path = args
 
-        # Signal completion to master and request new task
-        comm.send((original_clusters, markers, n), dest=MANAGER_RANK) 
-        # clusters is a list of lists of cell indices
-        # markers is a set of gene names
+                with open(idx_path, 'rb') as f:
+                    idx = pickle.load(f)
+                
+                # total number of idices in idx (a list of lists)
+                idx_size = len(idx)
 
-        # # Print result
-        # sizes = [len(cluster) for cluster in clusters]
-        # print(f"Worker {rank} finished clustering {adata.shape[0]} cells into {len(clusters)} clusters of sizes {sizes}")
+                adata = ad.read_h5ad(adata_path)
+                n = adata.shape[0]
 
-        # delete the temporary anndata file
-        os.remove(adata_path)
+                if idx_size != n:
+                    raise ValueError(f"Mismatch in number of indices. idx: {idx_size},  adata: {n}")
+
+                clusters, markers = func(adata, kwargs, random_seed)
+
+                # convert the indices back to the original indices
+                original_clusters = []
+                for cluster in clusters:
+                    original_clusters.append([idx[i] for i in cluster])
+
+                # Signal completion to the manager node (need to save to disk and pass paths instead of objects as well?)
+                comm.send((original_clusters, markers, n), dest=MANAGER_RANK) 
+
+                os.remove(adata_path)
+                os.remove(idx_path)
+            
+            except Exception as e:
+                error_msg = f"Worker {rank} error: {str(e)}\n{traceback.format_exc()}"
+                # err_file.write(error_msg + "\n")
+                # err_file.flush()
+                print(f"Error occurred: {error_msg}", flush=True)
+                raise
+            
 
 if __name__ == "__main__":
-    worker_job()
+    out_path = sys.argv[1]
+    worker_job(out_path)
