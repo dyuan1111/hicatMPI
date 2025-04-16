@@ -38,6 +38,8 @@ The table below shows the comparison of run time between the transcriptomic_clus
 | 80,000          | 63 minutes                | 18 minutes            |
 | 1,000,000       | 47 hours 41 minutes       | 2 hours 15 minutes    |
 
+- Clustering of 3.3 million cells using hicatMPI was completed on 10 nodes (500 GB each) in 7 hours.
+
 ### Clustering results comparison
 The confusion matrices below shows the clustering results from the transcriptomic_clustering package (y axis) and hicatMPI (x axis) for clustering 10k cells (left), 78k cells (middle), and 1 million cells (right). The 1-1 correspondence confirms that the same clustering results are obtained from both the original transcriptomic_clustering package and this MPI-based implementation, given the same data input and clustering parameters.
 
